@@ -6,6 +6,7 @@ import {
   Text,
   SplitSquareVertical,
   BoxIcon as ButtonIcon,
+  Image,
 } from "lucide-react";
 import { DraggableItem } from "./draggable-item";
 import type { ElementType } from "@/lib/types";
@@ -30,6 +31,11 @@ const elements = [
     type: "button" as ElementType,
     label: "Button",
     icon: <ButtonIcon className="h-4 w-4" />,
+  },
+  {
+    type: "image" as ElementType,
+    label: "Image",
+    icon: <Image className="h-4 w-4" />,
   },
   {
     type: "grid" as ElementType,

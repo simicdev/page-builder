@@ -10,7 +10,7 @@ import { ElementRenderer } from "@/components/element-renderer";
 import { ReadOnlyCanvas } from "@/components/readonly-canvas";
 
 export default function PageBuilder() {
-  const [elements, setElements] = useState<PageElement[]>(catBlogData.elements);
+  const [elements, setElements] = useState<PageElement[]>([]);
   const [selectedElement, setSelectedElement] = useState<string | null>(null);
   const [editMode, setEditMode] = useState<boolean>(true);
   const [livePreview, setLivePreview] = useState(false);
@@ -115,6 +115,8 @@ export default function PageBuilder() {
 
     if (!elementToMove) return; // Element not found
 
+    const validNewIndex = Math.max(0, newIndex);
+
     // Now insert the element at the new position
     if (targetId) {
       // Moving to a container
@@ -123,7 +125,7 @@ export default function PageBuilder() {
           if (el.id === targetId) {
             // Insert at the specified position
             const newChildren = [...(el.children || [])];
-            newChildren.splice(newIndex, 0, {
+            newChildren.splice(validNewIndex, 0, {
               ...elementToMove!,
               parentId: targetId,
             });
@@ -146,7 +148,7 @@ export default function PageBuilder() {
     } else {
       // Moving to the root canvas
       const result = [...newElements];
-      result.splice(newIndex, 0, {
+      result.splice(validNewIndex, 0, {
         ...elementToMove,
         parentId: undefined,
       });
@@ -239,7 +241,12 @@ export default function PageBuilder() {
     <DndProvider backend={HTML5Backend}>
       <div className="flex h-screen flex-col bg-background">
         <div className="flex items-center justify-between border-b p-4">
-          <h1 className="text-lg font-semibold">Mobile Page Builder</h1>
+          <h1 className="text-xl font-bold">
+            tapro{" "}
+            <span className="font-normal text-base text-gray-600">
+              page builder
+            </span>
+          </h1>
           <div className="flex gap-2">
             <button
               onClick={handleSave}
@@ -309,6 +316,8 @@ function getDefaultContent(type: ElementType): string {
       return "Text paragraph";
     case "button":
       return "Button";
+    case "image":
+      return "Image";
     case "grid":
       return "";
     case "row":
@@ -347,6 +356,12 @@ function getDefaultStyles(type: ElementType): Record<string, string> {
         borderRadius: "0.25rem",
         textAlign: "center",
         fontWeight: "500",
+      };
+    case "image":
+      return {
+        ...baseStyles,
+        padding: "0.5rem",
+        objectFit: "cover",
       };
     case "grid":
       return {

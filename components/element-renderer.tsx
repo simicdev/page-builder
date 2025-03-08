@@ -3,9 +3,9 @@
 import type React from "react";
 import { useRef, useState } from "react";
 import { useDrag, useDrop } from "react-dnd";
-import { GripVertical } from "lucide-react";
 import type { ElementType, PageElement } from "@/lib/types";
 import { cn } from "@/lib/utils";
+import Image from "next/image";
 
 interface ElementRendererProps {
   element: PageElement;
@@ -32,7 +32,7 @@ export function ElementRenderer({
   onReorder,
   editMode,
 }: ElementRendererProps) {
-  const { id, type, content, styles, children, params } = element;
+  const { id, type, content, styles, children, imageUrl } = element;
   const [dropIndicatorIndex, setDropIndicatorIndex] = useState<number | null>(
     null
   );
@@ -40,20 +40,6 @@ export function ElementRenderer({
     "left" | "right" | null
   >(null);
   const ref = useRef<HTMLDivElement>(null);
-  console.log("params", params);
-
-  const renderParam = (str: string) => {
-    const match = str.match(/\{\{(\w+)\.(\w+)\}\}/);
-
-    if (params && match) {
-      const [_, object, property] = match;
-      console.log("Object:", object); // "params"
-      console.log("Property:", property); // "name"
-      return params[property];
-    } else {
-      return str;
-    }
-  };
 
   const [{ isDragging }, drag, dragPreview] = useDrag({
     type: "placed-element",
@@ -73,10 +59,14 @@ export function ElementRenderer({
       if (!editMode || (type !== "grid" && type !== "row")) return;
       if (!ref.current) return;
 
+      // Get mouse position
       const clientOffset = monitor.getClientOffset();
       if (!clientOffset) return;
 
+      // Get container bounds
       const containerRect = ref.current.getBoundingClientRect();
+
+      // Check if mouse is within container bounds
       if (
         clientOffset.x < containerRect.left ||
         clientOffset.x > containerRect.right ||
@@ -89,24 +79,105 @@ export function ElementRenderer({
       }
 
       if (type === "row") {
-        const childWidth = containerRect.width / (children?.length || 1);
+        // For rows, calculate horizontal position
+        const childCount = children?.length || 1;
+        const childWidth = containerRect.width / childCount;
         const relativeX = clientOffset.x - containerRect.left;
+
+        // Special handling for the leftmost area
+        if (relativeX < 10) {
+          setDropIndicatorIndex(0);
+          setDropIndicatorPosition("left");
+          return;
+        }
+
+        // Special handling for the rightmost area
+        if (relativeX > containerRect.width - 10) {
+          setDropIndicatorIndex(childCount);
+          setDropIndicatorPosition("right");
+          return;
+        }
+
+        // Calculate which child element we're hovering over
         const hoverIndex = Math.floor(relativeX / childWidth);
+
+        // Calculate position within the child element (0-1)
+        const positionInElement =
+          (relativeX - hoverIndex * childWidth) / childWidth;
+
+        // Create more distinct drop zones - left third, middle third, right third
+        let position: "left" | "right" = "left";
+        let targetIndex = hoverIndex;
+
+        if (positionInElement < 0.33) {
+          // Left third of the element - drop before
+          position = "left";
+          targetIndex = hoverIndex;
+        } else if (positionInElement > 0.66) {
+          // Right third of the element - drop after
+          position = "right";
+          targetIndex = hoverIndex;
+        } else {
+          // Middle of the element - highlight the gap
+          // For middle, we'll use the right side of the current element
+          position = "right";
+          targetIndex = hoverIndex;
+        }
+
+        // Clamp index to valid range
         const maxIndex = children?.length || 0;
+        const clampedIndex = Math.max(0, Math.min(targetIndex, maxIndex));
 
-        const positionInElement = (relativeX % childWidth) / childWidth;
-        const position = positionInElement < 0.5 ? "left" : "right";
-
-        const clampedIndex = Math.max(0, Math.min(hoverIndex, maxIndex));
         setDropIndicatorIndex(clampedIndex);
         setDropIndicatorPosition(position);
       } else {
-        const elementHeight = 60;
+        // For grids and other containers, calculate vertical position
+        const childCount = children?.length || 1;
         const relativeY = clientOffset.y - containerRect.top;
-        const hoverIndex = Math.floor(relativeY / elementHeight);
-        const maxIndex = children?.length || 0;
 
-        const clampedIndex = Math.max(0, Math.min(hoverIndex, maxIndex));
+        // Special handling for the top area
+        if (relativeY < 10) {
+          setDropIndicatorIndex(0);
+          setDropIndicatorPosition(null);
+          return;
+        }
+
+        // Special handling for the bottom area
+        if (relativeY > containerRect.height - 10) {
+          setDropIndicatorIndex(childCount);
+          setDropIndicatorPosition(null);
+          return;
+        }
+
+        // Calculate row height based on container height and number of rows
+        // This is an approximation - in a real grid, you'd need to account for the actual layout
+        const rowCount = Math.ceil(childCount / 2); // Assuming 2 columns
+        const rowHeight = containerRect.height / rowCount;
+
+        // Calculate which row we're hovering over
+        const hoverRow = Math.floor(relativeY / rowHeight);
+
+        // Calculate position within the row (0-1)
+        const positionInRow = (relativeY - hoverRow * rowHeight) / rowHeight;
+
+        // Create more distinct drop zones - top third, middle third, bottom third
+        let targetIndex = hoverRow * 2; // Convert row to index (assuming 2 columns)
+
+        if (positionInRow < 0.33) {
+          // Top third of the row - drop before
+          targetIndex = hoverRow * 2;
+        } else if (positionInRow > 0.66) {
+          // Bottom third of the row - drop after
+          targetIndex = (hoverRow + 1) * 2;
+        } else {
+          // Middle of the row - drop after current row
+          targetIndex = (hoverRow + 1) * 2;
+        }
+
+        // Clamp index to valid range
+        const maxIndex = children?.length || 0;
+        const clampedIndex = Math.max(0, Math.min(targetIndex, maxIndex));
+
         setDropIndicatorIndex(clampedIndex);
         setDropIndicatorPosition(null);
       }
@@ -114,6 +185,7 @@ export function ElementRenderer({
     drop: (item: { type: ElementType; id?: string }, monitor) => {
       if (!editMode || (type !== "grid" && type !== "row")) return;
 
+      // Check if mouse is within container bounds
       const clientOffset = monitor.getClientOffset();
       if (!clientOffset || !ref.current) return;
 
@@ -127,11 +199,13 @@ export function ElementRenderer({
         return;
       }
 
+      // Calculate final drop index based on position
       let finalIndex =
         dropIndicatorIndex !== null
           ? dropIndicatorIndex
           : children?.length || 0;
 
+      // For rows with right position, increment the index
       if (
         type === "row" &&
         dropIndicatorPosition === "right" &&
@@ -140,15 +214,18 @@ export function ElementRenderer({
         finalIndex += 1;
       }
 
+      // If it's a new element
       if (!item.id) {
         onDrop(item, finalIndex, id);
-      } else {
+      }
+      // If it's an existing element being reordered
+      else {
         onReorder(item.id, finalIndex, id);
       }
 
       setDropIndicatorIndex(null);
       setDropIndicatorPosition(null);
-      return { id };
+      return { id }; // Indicate that we handled the drop
     },
     collect: (monitor) => ({
       isOver: !!monitor.isOver({ shallow: true }),
@@ -171,7 +248,7 @@ export function ElementRenderer({
       case "heading":
         return (
           <h2 className="p-4" style={styles}>
-            {renderParam(content)}
+            {content}
           </h2>
         );
       case "text":
@@ -182,6 +259,24 @@ export function ElementRenderer({
             {content}
           </button>
         );
+      case "image":
+        return (
+          <div>
+            {imageUrl ? (
+              <Image
+                src={imageUrl || "/placeholder.svg"}
+                alt={content || "Image"}
+                width={500}
+                height={500}
+                style={{ ...styles, width: "100%" }}
+              />
+            ) : (
+              <div className="flex h-32 w-full items-center justify-center bg-muted text-muted-foreground">
+                No image selected
+              </div>
+            )}
+          </div>
+        );
       case "grid":
         return (
           <div
@@ -191,6 +286,9 @@ export function ElementRenderer({
                 editMode && isOver ? "rgba(59, 130, 246, 0.1)" : undefined,
               transition: "background-color 0.2s",
               border: editMode ? styles.border || "1px dashed #e2e8f0" : "none",
+              backgroundImage: styles.backgroundImage || "none",
+              backgroundSize: styles.backgroundSize || "cover",
+              backgroundPosition: "center",
             }}
             className="relative w-full flex-1"
           >
@@ -228,12 +326,24 @@ export function ElementRenderer({
               </>
             )}
 
+            {/* Enhanced drop indicators for grid */}
             {editMode && isOver && dropIndicatorIndex !== null && (
               <div
-                className="absolute left-0 right-0 h-1 bg-primary z-10 transition-all"
+                className="absolute left-0 right-0 h-2 bg-primary z-10 transition-all"
                 style={{
-                  top: dropIndicatorIndex * 60,
-                  transform: "translateY(-50%)",
+                  top:
+                    dropIndicatorIndex === 0
+                      ? 0 // Position at the very top when index is 0
+                      : dropIndicatorIndex >= (children?.length || 0)
+                      ? "100%" // Position at the very bottom when at the end
+                      : `${
+                          (dropIndicatorIndex / (children?.length || 1)) * 100
+                        }%`,
+                  transform:
+                    dropIndicatorIndex === 0 ||
+                    dropIndicatorIndex >= (children?.length || 0)
+                      ? "translateY(0)" // No transform needed at the edges
+                      : "translateY(-50%)", // Center on other positions
                 }}
               />
             )}
@@ -248,6 +358,9 @@ export function ElementRenderer({
                 editMode && isOver ? "rgba(59, 130, 246, 0.1)" : undefined,
               transition: "background-color 0.2s",
               border: editMode ? styles.border || "1px dashed #e2e8f0" : "none",
+              backgroundImage: styles.backgroundImage || "none",
+              backgroundSize: styles.backgroundSize || "cover",
+              backgroundPosition: "center",
             }}
             className="relative w-full flex-1"
           >
@@ -282,20 +395,26 @@ export function ElementRenderer({
               </>
             )}
 
+            {/* Enhanced drop indicators for row */}
             {editMode && isOver && dropIndicatorIndex !== null && (
               <div
-                className="absolute top-0 bottom-0 w-1 bg-primary z-10 transition-all"
+                className="absolute top-0 bottom-0 w-2 bg-primary z-10 transition-all"
                 style={{
                   left:
-                    dropIndicatorPosition === "right"
+                    dropIndicatorIndex === 0 && dropIndicatorPosition === "left"
+                      ? 0 // Position at the very left when index is 0
+                      : dropIndicatorPosition === "right"
                       ? `calc(${
                           (dropIndicatorIndex + 1) *
                           (100 / (children?.length || 1))
-                        }% - 2px)`
+                        }%)`
                       : `${
                           dropIndicatorIndex * (100 / (children?.length || 1))
                         }%`,
-                  transform: "translateX(-50%)",
+                  transform:
+                    dropIndicatorIndex === 0 && dropIndicatorPosition === "left"
+                      ? "translateX(0)" // No transform needed at the left edge
+                      : "translateX(-50%)", // Center on other positions
                 }}
               />
             )}
@@ -324,7 +443,7 @@ export function ElementRenderer({
       {/* Element content with border only if THIS element is selected */}
       <div
         className={cn(
-          !element.parentId && (type !== "grid" || type !== "row") ? "p-4" : "",
+          // !element.parentId && (type !== "grid" || type !== "row") ? "p-4" : "",
           !isSelected && "hover:opacity-80 duration-200",
           // Apply border only if this specific element is selected
           editMode &&

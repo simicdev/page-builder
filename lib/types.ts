@@ -1,5 +1,11 @@
 import type React from "react";
-export type ElementType = "heading" | "text" | "button" | "grid" | "row";
+export type ElementType =
+  | "heading"
+  | "text"
+  | "button"
+  | "grid"
+  | "row"
+  | "image";
 
 export interface PageElement {
   id: string;
@@ -12,6 +18,7 @@ export interface PageElement {
   styles: Record<string, string>;
   children?: PageElement[]; // Add support for child elements
   parentId?: string; // Track parent element
+  imageUrl?: string; // For image elements
 }
 
 export interface DraggableItemProps {

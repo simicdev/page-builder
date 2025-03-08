@@ -71,14 +71,47 @@ export function BuilderCanvas({
         return;
       }
 
-      // Calculate position in the list based on Y coordinate
-      const elementHeight = 60; // Approximate height of an element
       const relativeY = clientOffset.y - canvasRect.top;
-      const index = Math.floor(relativeY / elementHeight);
-      const maxIndex = elements.length;
+      const elementCount = elements.length || 1;
+
+      // Special handling for the top area
+      if (relativeY < 10) {
+        setDropIndicatorIndex(0);
+        return;
+      }
+
+      // Special handling for the bottom area
+      if (relativeY > canvasRect.height - 10) {
+        setDropIndicatorIndex(elementCount);
+        return;
+      }
+
+      // Calculate which element we're hovering over
+      const elementHeight = canvasRect.height / elementCount;
+      const hoverIndex = Math.floor(relativeY / elementHeight);
+
+      // Calculate position within the element (0-1)
+      const positionInElement =
+        (relativeY - hoverIndex * elementHeight) / elementHeight;
+
+      // Create more distinct drop zones - top third, middle third, bottom third
+      let targetIndex = hoverIndex;
+
+      if (positionInElement < 0.33) {
+        // Top third of the element - drop before
+        targetIndex = hoverIndex;
+      } else if (positionInElement > 0.66) {
+        // Bottom third of the element - drop after
+        targetIndex = hoverIndex + 1;
+      } else {
+        // Middle of the element - drop after
+        targetIndex = hoverIndex + 1;
+      }
 
       // Clamp index to valid range
-      const clampedIndex = Math.max(0, Math.min(index, maxIndex));
+      const maxIndex = elements.length;
+      const clampedIndex = Math.max(0, Math.min(targetIndex, maxIndex));
+
       setDropIndicatorIndex(clampedIndex);
     },
     drop: (item: { type: ElementType; id?: string }, monitor) => {
@@ -128,8 +161,6 @@ export function BuilderCanvas({
 
   const selectedElementData = findElementById(elements, selectedElement);
 
-  console.log("selectedElement", { selectedElementData, selectedElement });
-
   // Recursive function to find an element by ID
   function findElementById(
     elements: PageElement[],
@@ -178,7 +209,7 @@ export function BuilderCanvas({
                 id="canvas"
                 ref={canvasRef}
                 onClick={handleCanvasClick}
-                className={`relative w-[990px] h-[844px] overflow-y-auto overflow-hidden rounded-2xl bg-background flex flex-col ${
+                className={`relative p-6 w-[990px] h-[844px] overflow-y-auto overflow-hidden rounded-2xl bg-background flex flex-col gap-10 ${
                   isOver ? "ring-2 ring-primary" : ""
                 }`}
               >
@@ -193,21 +224,35 @@ export function BuilderCanvas({
                         key={element.id}
                         element={element}
                         index={index}
+                        selectedElement={selectedElement!}
+                        isSelected={element.id === selectedElement}
                         onClick={handleElementClick}
-                        selectedElement={selectedElement}
                         onDrop={onDrop}
                         onReorder={onReorder}
                         editMode={editMode}
                       />
                     ))}
 
-                    {/* Drop indicator */}
+                    {/* Enhanced drop indicator */}
                     {editMode && isOver && dropIndicatorIndex !== null && (
                       <div
-                        className="absolute left-0 right-0 h-1 bg-primary z-10 transition-all"
+                        className="absolute left-0 right-0 h-2 bg-primary z-10 transition-all"
                         style={{
-                          top: dropIndicatorIndex * 60, // Approximate element height
-                          transform: "translateY(-50%)",
+                          top:
+                            dropIndicatorIndex === 0
+                              ? 0 // Position at the very top when index is 0
+                              : dropIndicatorIndex >= elements.length
+                              ? "100%" // Position at the very bottom when at the end
+                              : `${
+                                  (dropIndicatorIndex /
+                                    Math.max(1, elements.length)) *
+                                  100
+                                }%`,
+                          transform:
+                            dropIndicatorIndex === 0 ||
+                            dropIndicatorIndex >= elements.length
+                              ? "translateY(0)" // No transform needed at the edges
+                              : "translateY(-50%)", // Center on other positions
                         }}
                       />
                     )}
